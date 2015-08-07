@@ -1,0 +1,1 @@
+Like osm2pgsql but running directly on top of the OSM database!
