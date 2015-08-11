@@ -5,6 +5,7 @@
 -- license: MIT
 -- Caveats: tags are real-time, but node/way/relations updates require updating the materialized views
 -- As a result, this approach is best suited for smaller databases and where updates are relatively infrequent (i.e. not 100s of updates/min)
+-- Warning: This has not been fully tested for compatibility with osm2pgsql's data structure
 ------------------------------------------------------------------------------------------------------------
 
 --HStore and PostGIS extensions required
@@ -19,7 +20,7 @@ DROP MATERIALIZED VIEW postgis_node_geom CASCADE;
 CREATE MATERIALIZED VIEW postgis_node_geom AS
 SELECT
 id AS node_id,
-ST_Transform(ST_SetSRID(ST_MakePoint(longitude/100,latitude/100), 3785), 4326)::geometry(POINT,4326) AS geom
+ST_Transform(ST_SetSRID(ST_MakePoint(longitude::float/10000000,latitude::float/10000000), 4326), 900913)::geometry(POINT,900913) AS geom
 FROM current_nodes
 WITH DATA
 ;
@@ -48,7 +49,7 @@ group by a.id
 CREATE MATERIALIZED VIEW postgis_way_geom AS
 SELECT
 a.id AS way_id,
-ST_MakeLine(c.geom ORDER BY b.sequence_id)::geometry(LINESTRING,4326) AS geom,
+ST_MakeLine(c.geom ORDER BY b.sequence_id)::geometry(LINESTRING,900913) AS geom,
 array_agg(b.node_id ORDER BY b.sequence_id) as nodes
 FROM current_ways a
 LEFT JOIN current_way_nodes b ON a.id = b.way_id
@@ -69,7 +70,7 @@ a.way_id as id,
 a.nodes,
 hstore(array_agg(d.k::text),array_agg(d.v::text)) AS tags,
 FALSE::BOOLEAN as pending,
-a.geom::geometry(LINESTRING,4326) --also adding the geom (not included in osm2pgsql)
+a.geom::geometry(LINESTRING,900913) --also adding the geom (not included in osm2pgsql)
 FROM postgis_way_geom a
 LEFT JOIN current_way_tags d ON a.way_id = d.way_id
 GROUP BY a.way_id, a.nodes, a.geom
@@ -79,7 +80,7 @@ GROUP BY a.way_id, a.nodes, a.geom
 CREATE OR REPLACE VIEW planet_osm_line AS
 SELECT
 id as osm_id,
-geom::geometry(LINESTRING,4326),
+geom::geometry(LINESTRING,900913),
 tags
 FROM planet_osm_ways
 WHERE ((tags->'area') <> 'yes')
@@ -118,16 +119,16 @@ CREATE MATERIALIZED VIEW postgis_polygon_geom AS
 --polygons from ways
 SELECT
 id AS osm_id,
-ST_Multi(ST_MakePolygon(ST_AddPoint(geom, ST_StartPoint(geom))))::geometry(MULTIPOLYGON,4326) AS geom,
+ST_Multi(ST_MakePolygon(ST_AddPoint(geom, ST_StartPoint(geom))))::geometry(MULTIPOLYGON,900913) AS geom,
 'way'::text as osm_source
 FROM planet_osm_ways
-WHERE ((tags->'area') = 'yes')
+WHERE (((tags->'area') = 'yes') OR ((tags->'area') = 'true'))
 
 UNION
 --Multipolygons
 SELECT
 a.id as osm_id,
-ST_Multi(ST_Union(c.geom ORDER BY b.sequence_id))::geometry(MULTIPOLYGON,4326) as geom,
+ST_Multi(ST_Union(c.geom ORDER BY b.sequence_id))::geometry(MULTIPOLYGON,900913) as geom,
 'rel'::text as osm_source
 FROM planet_osm_rels a
 LEFT JOIN current_relation_members b ON a.id = b.relation_id
@@ -141,8 +142,8 @@ UNION
 SELECT
 a.id as osm_id,
 CASE WHEN ST_Accum(innerpoly.geom) = '{NULL}'
-THEN ST_Multi(ST_MakePolygon(outerpoly.geom))::geometry(MULTIPOLYGON,4326)
-ELSE ST_Multi(ST_MakePolygon(outerpoly.geom, ST_Accum(innerpoly.geom order by innerpoly.sequence_id)))::geometry(MULTIPOLYGON,4326)
+THEN ST_Multi(ST_MakePolygon(outerpoly.geom))::geometry(MULTIPOLYGON,900913)
+ELSE ST_Multi(ST_MakePolygon(outerpoly.geom, ST_Accum(innerpoly.geom order by innerpoly.sequence_id)))::geometry(MULTIPOLYGON,900913)
 END AS geom,
 'rel'::text as osm_source
 FROM planet_osm_rels a
@@ -168,7 +169,7 @@ WITH DATA
 ;
 
 
-CREATE UNIQUE INDEX postgis_polygon_geom_osm_id_idx
+CREATE INDEX postgis_polygon_geom_osm_id_idx
   ON postgis_polygon_geom (osm_id);
 
 CREATE INDEX postgis_polygon_geom_geom_idx ON postgis_polygon_geom USING GIST (geom);
@@ -176,14 +177,14 @@ CREATE INDEX postgis_polygon_geom_geom_idx ON postgis_polygon_geom USING GIST (g
 --Polygons with Tags
 CREATE or replace VIEW planet_osm_polygon AS
 SELECT a.osm_id,
-a.geom::geometry(MULTIPOLYGON,4326),
+a.geom::geometry(MULTIPOLYGON,900913),
 b.tags
 FROM postgis_polygon_geom a
 LEFT JOIN planet_osm_ways b on a.osm_id = b.id
 WHERE osm_source = 'way'
 UNION
 SELECT a.osm_id,
-a.geom::geometry(MULTIPOLYGON,4326),
+a.geom::geometry(MULTIPOLYGON,900913),
 b.tags
 FROM postgis_polygon_geom a
 LEFT JOIN planet_osm_rels b on a.osm_id = b.id
@@ -193,7 +194,7 @@ WHERE osm_source = 'rel';
 CREATE OR REPLACE VIEW planet_osm_point AS
 SELECT
 a.id AS osm_id,
-c.geom::geometry(POINT,4326),
+c.geom::geometry(POINT,900913),
 a.tags
 FROM planet_osm_nodes a
 LEFT JOIN current_way_nodes b ON a.id = b.node_id
