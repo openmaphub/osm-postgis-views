@@ -68,7 +68,10 @@ CREATE OR REPLACE VIEW planet_osm_ways AS
 SELECT
 a.way_id as id,
 a.nodes,
-hstore(array_agg(d.k::text),array_agg(d.v::text)) AS tags,
+CASE WHEN count(d.k) = 0
+THEN NULL
+ELSE hstore(array_agg(d.k::text),array_agg(d.v::text))
+END AS tags,
 FALSE::BOOLEAN as pending,
 a.geom::geometry(LINESTRING,900913) --also adding the geom (not included in osm2pgsql)
 FROM postgis_way_geom a
