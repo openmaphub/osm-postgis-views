@@ -135,7 +135,7 @@ ST_Multi(ST_Union(c.geom ORDER BY b.sequence_id))::geometry(MULTIPOLYGON,900913)
 'rel'::text as osm_source
 FROM planet_osm_rels a
 LEFT JOIN current_relation_members b ON a.id = b.relation_id
-LEFT JOIN (SELECT id, ST_MakePolygon(ST_AddPoint(geom, ST_StartPoint(geom))) as geom FROM planet_osm_ways) c ON b.member_id = c.id
+LEFT JOIN (SELECT id, ST_MakeValid(ST_MakePolygon(ST_AddPoint(geom, ST_StartPoint(geom)))) as geom FROM planet_osm_ways) c ON b.member_id = c.id
 LEFT JOIN relation_member_counts d ON a.id = d.relation_id
 WHERE d.member_role = 'outer' and d.count > 1
 GROUP BY a.id
