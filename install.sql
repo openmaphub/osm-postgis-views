@@ -152,14 +152,20 @@ END AS geom,
 FROM planet_osm_rels a
 JOIN (
 	SELECT b.relation_id,
-	geom
+	CASE WHEN ST_IsClosed(geom) THEN geom
+	ELSE ST_AddPoint(geom, ST_StartPoint(geom))
+	END as geom
 	FROM planet_osm_ways a
 	LEFT JOIN current_relation_members b ON a.id = b.member_id
 	LEFT JOIN relation_member_counts d ON b.relation_id = d.relation_id
 	WHERE b.member_role = 'outer' AND b.member_type = 'Way' AND d.count = 1
 ) outerpoly ON a.id = outerpoly.relation_id
 LEFT JOIN (
-	SELECT b.relation_id, a.id as way_id, ST_AddPoint(geom, ST_StartPoint(geom)) as geom, b.sequence_id
+	SELECT b.relation_id, a.id as way_id,
+	CASE WHEN ST_IsClosed(geom) THEN geom
+	ELSE ST_AddPoint(geom, ST_StartPoint(geom))
+	END as geom,
+	b.sequence_id
 	FROM planet_osm_ways a
 	LEFT JOIN current_relation_members b ON a.id = b.member_id
 	LEFT JOIN relation_member_counts d ON b.relation_id = d.relation_id
