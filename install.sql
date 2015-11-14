@@ -86,7 +86,7 @@ id as osm_id,
 geom::geometry(LINESTRING,900913),
 tags
 FROM planet_osm_ways
-WHERE ((tags->'area') <> 'yes')
+WHERE ((tags->'area') <> 'yes' OR (tags->'area') IS NULL)
 	AND id NOT IN (SELECT member_id from current_relation_members WHERE member_type = 'Way')
 ;
 
