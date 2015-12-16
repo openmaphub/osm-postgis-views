@@ -86,8 +86,13 @@ id as osm_id,
 geom::geometry(LINESTRING,900913),
 tags
 FROM planet_osm_ways
-WHERE ((tags->'area') <> 'yes' OR (tags->'area') IS NULL)
-	AND id NOT IN (SELECT member_id from current_relation_members WHERE member_type = 'Way')
+WHERE ((tags->'area') NOT IN ('yes', 'true') OR (tags->'area') IS NULL)
+	AND id NOT IN (
+    SELECT DISTINCT current_relations.id FROM current_relation_tags
+    LEFT JOIN current_relations ON current_relation_tags.relation_id = current_relations.id
+    LEFT JOIN current_relation_members  ON current_relation_members.relation_id = current_relations.id
+    WHERE k = 'type' AND v = 'multipolygon' AND member_type = 'Way'
+  )
 ;
 
 --Relations
